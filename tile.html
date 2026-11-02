@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tile Territory</title>
+<style>
+  :root{--tile:170px;--panel:#25352d;--panel2:#2f4338;--gold:#ffe600}
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{font-family:system-ui,sans-serif;background:#1a241f;color:#eee}
+  .app{height:100%;display:grid;grid-template-columns:260px 1fr 280px;grid-template-rows:auto 1fr auto;grid-template-areas:"top top top" "inv map craft" "bar bar bar"}
+  .panel{background:var(--panel);padding:14px;overflow:auto}
+  .panel h2{margin:0 0 10px;font-size:1.05rem}
+  #inv{grid-area:inv}
+  #craft{grid-area:craft}
+  #mapwrap{grid-area:map;overflow:auto;padding:12px;position:relative}
+  #grid{display:grid;grid-template-columns:repeat(11,var(--tile));grid-auto-rows:var(--tile);gap:4px;width:max-content}
+  .tile{position:relative;overflow:hidden;border-radius:4px;background:#444;outline:3px solid transparent;outline-offset:-3px;filter:brightness(.55);user-select:none}
+  .tile img.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .tile .emoji{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:48px}
+  .tile.option{cursor:pointer;filter:none}
+  .tile.option:hover{outline:3px dashed #fff}
+  .tile.owned{filter:none;outline:3px solid var(--gold);z-index:1}
+  .tile.placeable{cursor:pointer;outline:3px dashed #7cfc00}
+  .tile.placeable:hover{outline-style:solid}
+  .tile .label{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 5px;font-size:11.5px;line-height:1.28;white-space:pre-line;background:linear-gradient(transparent,rgba(0,0,0,.8));text-shadow:0 1px 2px #000}
+  .star{position:absolute;top:4px;left:6px;font-size:18px;text-shadow:0 0 4px #000;z-index:2}
+  .slots{position:absolute;top:4px;right:4px;display:flex;flex-wrap:wrap;justify-content:flex-end;max-width:115px;gap:3px;z-index:2}
+  .slot{width:32px;height:32px;border:2px dashed rgba(255,255,255,.65);border-radius:5px;background:rgba(0,0,0,.4);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:18px}
+  .slot.full{border-style:solid;border-color:var(--gold)}
+  .slot img{width:100%;height:100%;object-fit:cover}
+  .row{display:flex;align-items:center;gap:8px;background:var(--panel2);border-radius:8px;padding:4px 8px;margin-bottom:4px}
+  .row .name{flex:1;font-size:14px}
+  .row .count{font-weight:700;font-size:1.05rem;min-width:24px;text-align:right}
+  .row button{padding:4px 10px;font-size:12px}
+  .row button.active{background:#7cfc00}
+  .sep{margin:12px 0 6px;font-size:12px;opacity:.65;text-transform:uppercase;letter-spacing:.05em}
+  .ico{display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center;font-size:22px;flex:none}
+  .ico img{width:100%;height:100%;object-fit:contain}
+  .ico.big{width:52px;height:52px;font-size:34px}
+  .recipe{background:var(--panel2);border-radius:8px;padding:12px;margin-bottom:10px}
+  .recipe .line{display:flex;align-items:center;gap:6px;margin:6px 0;flex-wrap:wrap}
+  .recipe .need.missing{color:#ff8a80}
+  button{padding:8px 16px;border:0;border-radius:6px;background:var(--gold);font-weight:700;cursor:pointer;color:#222}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  #bar{grid-area:bar;background:#101a15;border-top:2px solid #3d5648;padding:10px 14px;display:flex;align-items:center;gap:12px;min-height:62px}
+  #pending{display:flex;gap:8px;flex:1;flex-wrap:wrap;align-items:center}
+  .chip{display:flex;align-items:center;gap:4px;background:var(--panel2);border-radius:20px;padding:2px 12px 2px 4px;font-weight:700}
+  .chip .ico{width:26px;height:26px;font-size:18px}
+  .muted{opacity:.6}
+  #newgame{background:#6b7d73;color:#fff}
+  .hint{font-size:12px;opacity:.7;margin-top:10px}
+  [hidden]{display:none!important}
+  .row.drag{cursor:grab}
+  .care{background:var(--panel2);border-radius:8px;padding:8px;margin-top:6px;border:2px dashed rgba(255,255,255,.25)}
+  .care.over{border-color:#7cfc00;background:#36513f}
+  .stat{display:flex;align-items:center;gap:8px;padding:4px 2px}
+  .stat .mid{flex:1;font-size:13px}
+  .stat .count{font-weight:700}
+  .sub{font-size:11px;opacity:.75}
+  .stat.low{color:#ff8a80}
+  .tip{margin-top:6px}
+  #over{position:fixed;inset:0;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;z-index:50}
+  #over .box{background:var(--panel);padding:28px 36px;border-radius:12px;text-align:center;max-width:420px}
+  #over h1{margin:0 0 8px;color:#ff8a80}
+  #top{grid-area:top;display:flex;flex-wrap:wrap;align-items:center;gap:18px;padding:8px 14px;background:#1f2d26;border-bottom:2px solid #3d5648}
+  #people{display:flex;align-items:center;gap:12px;min-width:170px}
+  .pchip{display:flex;align-items:center;gap:4px;font-weight:700}
+  #shelter{font-size:12px;opacity:.85;line-height:1.3}
+  #careBox .care{margin:0;padding:6px 12px}
+  .care .stats{display:flex;gap:20px;flex-wrap:wrap}
+  .care.idle{opacity:.5}
+  .stat .count{font-size:1.15rem;margin-right:4px}
+  #msgbox{flex:1;min-width:240px}
+  #msg{margin:0;font-weight:600;line-height:1.35}
+  button.active{background:#7cfc00}
+  button.sec{background:#8fb5a0}
+  #recipeModal,#invModal,#rebuildModal,#achModal,#shopModal,#cheatModal,#confirmModal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:40;display:flex;align-items:center;justify-content:center}
+  .mbox{background:var(--panel);border-radius:12px;padding:20px;width:min(1100px,94vw);max-height:90vh;overflow:auto}
+  .mhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .mhead h2{margin:0;font-size:1.3rem}
+  #recipesBig{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  #recipesBig .recipe{margin:0}
+  .recipe.big .ico{width:44px;height:44px;font-size:30px}
+  .recipe.big b{font-size:1.1rem}
+  .have{opacity:.65;font-size:12px;margin-left:4px}
+  .tile.deletable{cursor:pointer;outline:3px dashed #ff5252}
+  .tile.rebuildable{cursor:pointer;outline:3px dashed #ffab40}
+  .pcol{display:flex;flex-direction:column;gap:4px}
+  .pbtns{display:flex;gap:6px}
+  .pbtns button{padding:3px 10px;font-size:12px}
+  #energyBox{display:flex;align-items:center;gap:8px;background:var(--panel2);border-radius:8px;padding:6px 12px;min-width:190px}
+  #energyBox .mid{flex:1}
+  .eMain{font-weight:700}
+  .ebar{height:6px;background:rgba(0,0,0,.35);border-radius:3px;margin-top:3px;overflow:hidden}
+  .efill{height:100%;background:#ffd740;width:0}
+  .crow{display:flex;gap:12px;align-items:center;background:var(--panel2);border-radius:10px;padding:10px;margin-bottom:8px}
+  .cmid{flex:1}
+  .cchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;align-items:center}
+  .cchip{display:flex;align-items:center;gap:3px;background:rgba(0,0,0,.25);border-radius:6px;padding:2px 8px;font-size:13px}
+  .cchip .ico{width:22px;height:22px;font-size:15px}
+  .cchip.missing{color:#ff8a80}
+  .cchip.gain{color:#9be59b}
+  .thumb{width:64px;height:64px;border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:30px;flex:none;background:#444}
+  .thumb img{width:100%;height:100%;object-fit:cover}
+  #confirmModal{z-index:60}
+  #bar{flex-wrap:wrap}
+  #bar button{padding:7px 12px}
+  body{transition:background .3s}
+  body[data-mode="deleting"]{background:#341719;--mode:#ff5252}
+  body[data-mode="expanding"]{background:#122a35;--mode:#4fc3f7}
+  body[data-mode="rebuilding"]{background:#35260f;--mode:#ffab40}
+  body[data-mode="placing"]{background:#15321a;--mode:#7cfc00}
+  body{--mode:#3d5648}
+  #mapwrap{box-shadow:inset 0 0 0 4px var(--mode)}
+  #modeBadge{display:inline-block;background:var(--mode);color:#111;font-weight:800;font-size:12px;letter-spacing:.06em;padding:2px 12px;border-radius:12px;margin-bottom:4px}
+  #achBody{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:12px}
+  .acard.done{border-color:#ffd740}
+  .abar{height:8px;border-radius:4px;background:rgba(0,0,0,.35);overflow:hidden}
+  .afill{height:100%;background:#7cfc00}
+  .acard.done .afill{background:#ffd740}
+  #shopBody{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:8px}
+  .srow{display:flex;align-items:center;gap:8px;background:var(--panel2);border-radius:10px;padding:6px 10px}
+  .srow .nm{flex:1;font-size:14px}
+  .srow .rate{font-size:12px;opacity:.8;min-width:90px}
+  .srow button{padding:3px 8px;font-size:12px}
+  .icard.click{cursor:pointer}
+  .icard.click:hover{outline:2px solid var(--gold)}
+  .tile.deletable .slot.full{border-color:#ff5252;cursor:pointer}
+  .recipe.locked{opacity:.6}
+  .lock{font-size:12px;color:#ffcc80;margin:4px 0}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .tab{background:var(--panel2);color:#eee;border-radius:20px;padding:6px 14px;font-weight:600}
+  .tab.active{background:var(--gold);color:#222}
+  .rcard{background:var(--panel2);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;border:2px solid transparent}
+  .rcard.ready{border-color:#7cfc00}
+  .rcard.locked{opacity:.6}
+  .rhead{display:flex;gap:12px;align-items:center}
+  .rhead .ico{width:56px;height:56px;font-size:36px;background:rgba(0,0,0,.25);border-radius:10px;padding:4px}
+  .rtitle b{font-size:1.1rem;display:block}
+  .ring{display:flex;flex-direction:column;gap:4px}
+  .ring .need{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.22);border-radius:8px;padding:3px 8px}
+  .ring .need .ico{width:26px;height:26px;font-size:18px}
+  .ring .need .nm{flex:1;font-size:14px}
+  .ring .need .have{opacity:1;font-size:13px;font-weight:700;margin:0;font-variant-numeric:tabular-nums}
+  .ring .need.missing .have{color:#ff8a80}
+  .rcard button{width:100%}
+  .ihead{margin:18px 0 8px;font-size:1rem;opacity:.85;border-bottom:1px solid #3d5648;padding-bottom:4px}
+  .igrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+  .icard{background:var(--panel2);border-radius:12px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center;font-size:13px}
+  .icard.zero{opacity:.4}
+  .icard .ico{width:52px;height:52px;font-size:34px}
+  .icard .cnt{font-size:1.3rem;font-weight:800}
+  .icard button{padding:3px 10px;font-size:12px;margin-top:2px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div id="top">
+    <div id="people"></div>
+    <div id="careBox"></div>
+    <div id="energyBox"></div>
+    <div id="msgbox"><span id="modeBadge">STANDARD</span><p id="msg"></p></div>
+  </div>
+
+  <div class="panel" id="inv"><h2>Inventory</h2><div id="invlist"></div></div>
+
+  <div id="mapwrap">
+    <div id="grid"></div>
+  </div>
+
+  <div class="panel" id="craft">
+    <h2>Crafting</h2>
+    <div id="recipes" class="rlist"></div>
+    <p class="hint">Bundles of Wheat, huts and other buildings: press <b>Place</b> in your inventory, then click a green-outlined tile. Every building takes one slot: Plains have 3 slots, Pens 2, every other tile 1. Bundles feed a Pen's animals for 60s each, and the timer shows all its bundles combined. A Small Hut houses 2 people, a Straw Hut 1. Add people with the ＋ buttons at the top (never more than your housing, and they can never leave). Press D to delete buildings (nothing is refunded) and S to rebuild a tile. Once people move in, they need Water, Food and Clothing: craft Bread (5 Wheat) and Clothing (1 Wool + 1 Leather makes 5), then drag items onto their Shared supplies.</p>
+  </div>
+
+  <div id="bar">
+    <b>Collected:</b>
+    <div id="pending"></div>
+    <button id="expandBtn" class="sec">Expand (E)</button>
+    <button id="recipesBtn" class="sec">Recipes (C)</button>
+    <button id="invBtn" class="sec">Inventory (I)</button>
+    <button id="achBtn" class="sec">Achievements (A)</button>
+    <button id="shopBtn" class="sec">Shop (B)</button>
+    <button id="rebuildBtn" class="sec">Rebuild (S)</button>
+    <button id="deleteBtn" class="sec">Delete (D)</button>
+    <button id="collect">Collect</button>
+    <button id="newgame">New game</button>
+  </div>
+</div>
+
+<div id="achModal" hidden><div class="mbox">
+  <div class="mhead"><h2>🏆 Achievements</h2><button id="closeAch">Close (A)</button></div>
+  <div id="achSummary" class="sub"></div>
+  <div id="achBody"></div>
+</div></div>
+
+<div id="shopModal" hidden><div class="mbox">
+  <div class="mhead"><h2>🛒 Shop</h2><div><b>Coins: <span id="shopCoins">0</span></b> &nbsp; <button id="closeShop">Close (B)</button></div></div>
+  <div id="shopTabs" class="tabs"></div>
+  <div id="shopBody"></div>
+</div></div>
+
+<div id="cheatModal" hidden><div class="mbox">
+  <div class="mhead"><h2>🧪 Cheat menu</h2><button id="closeCheat">Close</button></div>
+  <div id="cheatBody"></div>
+</div></div>
+
+<div id="confirmModal" hidden><div class="mbox" style="max-width:460px">
+  <div class="mhead"><h2>Start a new game?</h2></div>
+  <p>This will delete your current world and everything in it.</p>
+  <div style="display:flex;gap:10px;justify-content:flex-end"><button id="confirmCancel" class="sec">Cancel</button><button id="confirmOk">OK</button></div>
+</div></div>
+
+<div id="rebuildModal" hidden><div class="mbox">
+  <div class="mhead"><h2 id="rbTitle">Rebuild tile</h2><button id="closeRb">Close (Esc)</button></div>
+  <div id="rbBody"></div>
+</div></div>
+
+<div id="invModal" hidden><div class="mbox">
+  <div class="mhead"><h2>🎒 Inventory</h2><button id="closeInv">Close (I)</button></div>
+  <div id="invSummary" class="sub"></div>
+  <div id="invBig"></div>
+</div></div>
+
+<div id="recipeModal" hidden><div class="mbox">
+  <div class="mhead"><h2>🛠️ Crafting</h2><button id="closeRecipes">Close (C)</button></div>
+  <div id="recipeTabs" class="tabs"></div>
+  <div id="recipesBig" class="rlist"></div>
+</div></div>
+
+<div id="over" hidden><div class="box"><h1 id="overTitle">Game over</h1><p id="overMsg"></p><button id="again">Play again</button></div></div>
+
+<script>
+const W = 11, H = 6;
+
+// ---------- Data ----------
+const TYPES = {
+  Desert:    {url:"https://i.imgur.com/CPqcKyy.jpeg", color:"#e3c27e", icon:"🏜️"},
+  Concrete:  {url:"https://i.imgur.com/w1ggJ3A.jpeg", color:"#9a9a9a", icon:"🏢"},
+  River:     {url:"https://i.imgur.com/RUEcmk5.jpeg", color:"#3b82c4", icon:"🌊"},
+  Mountains: {url:"https://i.imgur.com/0I6xIWn.jpeg", color:"#7d8791", icon:"⛰️"},
+  Pen:       {url:"https://i.imgur.com/WFJYK3o.jpeg", color:"#a9784a", icon:"🐑"},
+  Field:     {url:"https://i.imgur.com/EnIeWsk.jpeg", color:"#d9bf4a", icon:"🌾"},
+  Forest:    {url:"https://i.imgur.com/OGDLJl9.jpeg", color:"#2d6a2d", icon:"🌲"},
+  Plain:     {url:"https://i.imgur.com/mK2DVtT.jpeg", color:"#9cc467", icon:"🌿"}
+};
+// Items. `building: true` items can be placed on tiles. Emoji are the fallback if an image fails to load.
+const ITEMS = {
+  Sand:               {url:"https://i.imgur.com/J6UsG8P.png", icon:"⏳"},
+  Water:              {url:"https://i.imgur.com/usJLeJ5.png", icon:"💧"},
+  Wood:               {url:"https://i.imgur.com/hmlbEOf.png", icon:"🪵"},
+  Wheat:              {url:"https://i.imgur.com/o03Icis.png", icon:"🌾"},
+  Leather:            {url:"https://i.imgur.com/q8xnTVE.png", icon:"🟫"},
+  Milk:               {url:"https://i.imgur.com/Rs5Zti1.png", icon:"🥛"},
+  Wool:               {url:"https://i.imgur.com/k516b2G.png", icon:"🧶"},
+  Concrete:           {url:"https://i.imgur.com/6kTuYfi.png", icon:"🧱"},
+  "Bundle of Wheat":  {url:"https://i.imgur.com/yKu5bDI.png", icon:"🌾", building:true},
+  "Small Hut":        {url:"https://i.imgur.com/hHIreTI.png", icon:"🛖", building:true},
+  Bread:              {url:"https://i.imgur.com/ZtqKcFA.png", icon:"🍞"},
+  Clothing:           {url:"https://i.imgur.com/bh6dOoh.png", icon:"👕"},
+  "Water Barrel":     {url:"https://i.imgur.com/BQMFCjL.png", icon:"🛢️"},
+  Stone:              {url:"https://i.imgur.com/5xL7KIs.png", icon:"🪨"},
+  Gold:               {url:"https://i.imgur.com/5h57ND0.png", icon:"🪙"},
+  Iron:               {url:"https://i.imgur.com/RhMC1Gs.png", icon:"🔩"},
+  Coal:               {url:"https://i.imgur.com/PMtJmoh.png", icon:"⚫"},
+  Robe:               {url:"https://i.imgur.com/cD33fY6.png", icon:"👘"},
+  "Straw Hut":        {url:"https://i.imgur.com/MnVIs3X.png", icon:"🏚️", building:true},
+  "Stone Grinder":    {url:"https://i.imgur.com/8uUcjRW.png", icon:"⚙️", building:true},
+  Extractor:          {url:"https://i.imgur.com/deomBEl.png", icon:"⛏️", building:true},
+  "Clothing Factory": {url:"https://i.imgur.com/GEM55sM.png", icon:"🏭", building:true},
+  Fish:               {url:"https://i.imgur.com/j9NIcbE.png", icon:"🐟"},
+  Cheese:             {url:"https://i.imgur.com/Uj8c0Jl.png", icon:"🧀"},
+  "Iron Ingot":       {url:"https://i.imgur.com/qthLLt2.png", icon:"🥈"},
+  "Gold Ingot":       {url:"https://i.imgur.com/kvnmrj5.png", icon:"🥇"},
+  Glass:              {url:"https://i.imgur.com/KAxQpMt.png", icon:"🪟"},
+  "Fishing Dock":     {url:"https://i.imgur.com/gJGgVG3.png", icon:"🎣", building:true},
+  Well:               {url:"https://i.imgur.com/YzobGfP.png", icon:"🪣", building:true},
+  "Cheese Maker":     {url:"https://i.imgur.com/0PKdilH.png", icon:"🧈", building:true},
+  Smeltery:           {url:"https://i.imgur.com/geTIdZ2.png", icon:"🔥", building:true},
+  Permit:             {url:"https://i.imgur.com/4FdlgwF.png", icon:"📜"},
+  "Compressed Coal":  {url:"https://i.imgur.com/wG6tOnR.png", icon:"⬛", building:true},
+  "Coal Power Plant": {url:"https://i.imgur.com/UFB85kk.png", icon:"🏭", building:true},
+  Coin:               {url:null, icon:"💰"},
+  House:              {url:"https://i.imgur.com/p14y4HS.png", icon:"🏠", building:true},
+  "Vending Stand":    {url:"https://i.imgur.com/FvCQwZs.png", icon:"🏪", building:true},
+  "Water Wheel":      {url:"https://i.imgur.com/3b3pp0E.png", icon:"☸️", building:true}
+};
+const PEOPLE = {
+  Man:   {url:"https://i.imgur.com/AUf3AWm.png", icon:"👨"},
+  Woman: {url:"https://i.imgur.com/c8FKSY6.png", icon:"👩"}
+};
+// How items are grouped in the inventory (left panel shows non-"always" groups only when you own something in them)
+const CATEGORIES = [
+  {name:"Resources",    always:true, items:["Sand","Water","Wood","Wheat","Stone","Iron","Coal","Gold","Leather","Milk","Wool"]},
+  {name:"Materials",    items:["Concrete","Glass","Iron Ingot","Gold Ingot","Compressed Coal"]},
+  {name:"Food & Drink", items:["Fish","Cheese","Bread","Water Barrel"]},
+  {name:"Clothing",     items:["Clothing","Robe"]},
+  {name:"Buildings",    items:["Bundle of Wheat","Small Hut","Straw Hut","House","Stone Grinder","Extractor","Clothing Factory","Fishing Dock","Well","Cheese Maker","Smeltery","Coal Power Plant","Water Wheel","Vending Stand"]},
+  {name:"Other",        always:true, items:["Permit","Coin"]}
+];
+
+// What each tile type produces. `needsFeed`: only produces while the tile has a bundle of wheat to eat.
+const PRODUCERS = {
+  Forest:    {out:[{res:"Wood",  every:5}]},
+  Desert:    {out:[{res:"Sand",  every:3}]},
+  River:     {out:[{res:"Water", every:2}]},
+  Mountains: {out:[{res:"Water", every:15},{res:"Stone", every:10}]},
+  Field:     {out:[{res:"Wheat", every:4}]},
+  Pen:       {needsFeed:true, out:[{res:"Leather", every:12},{res:"Milk", every:15},{res:"Wool", every:25}]}
+};
+// Building slots per tile type (any type not listed gets DEFAULT_SLOTS). Every placed building uses one slot.
+const SLOTS = {Pen:2, Plain:3, Concrete:6};
+const DEFAULT_SLOTS = 1;
+function slotCount(type){ return SLOTS[type] ?? DEFAULT_SLOTS; }
+// Where each building may go (`on: null` = any territory) and how long it lasts (seconds, optional).
+// on: tile types it may stand on (null = any) · houses: people it can house · energy: Energy per second it needs
+// maxPerTile / onTileWith: placement limits · lifetime: seconds it lasts (fuel / feed)
+const BUILDINGS = {
+  "Bundle of Wheat":  {on:["Pen"], lifetime:60},
+  "Small Hut":        {on:null, houses:2},
+  "Straw Hut":        {on:null, houses:1},
+  "Stone Grinder":    {on:null},
+  Extractor:          {on:["Mountains","River"]},
+  "Clothing Factory": {on:null},
+  "Fishing Dock":     {on:["River"]},
+  Well:               {on:null},
+  "Cheese Maker":     {on:null, energy:1},
+  Smeltery:           {on:null},
+  "Coal Power Plant": {on:["Plain","Concrete"], maxPerTile:1},
+  "Water Wheel":      {on:["River"]},
+  House:              {on:null, houses:5},
+  "Vending Stand":    {on:null},
+  "Compressed Coal":  {on:null, onTileWith:"Coal Power Plant", lifetime:120}
+};
+// Buildings that produce things: building -> tile type it stands on -> outputs
+// `amount` (default 1) is produced every `every` seconds. Key "*" = on any tile type.
+const BUILDING_OUTPUT = {
+  Extractor: {
+    River:     [{res:"Gold", every:120}],
+    Mountains: [{res:"Iron", every:20}, {res:"Coal", every:15}]
+  },
+  "Fishing Dock": { River: [{res:"Fish", every:14}] },
+  Well:           { "*":   [{res:"Water", every:1, amount:2}] }
+};
+// A building can switch off the tile's own production of some resources (a Fishing Dock stops the River's water).
+const BUILDING_REPLACES = { "Fishing Dock": ["Water"] };
+function outputsOf(b, tileName){ const o = BUILDING_OUTPUT[b.type]; return o ? (o[tileName] || o["*"]) : null; }
+function suppressedAt(i){
+  const set = new Set();
+  (buildings[i] || []).forEach(b => (BUILDING_REPLACES[b.type] || []).forEach(r => set.add(r)));
+  return set;
+}
+// cat = tab in the crafting window. `requires` = a building you must own (placed somewhere) to use the recipe.
+// A building can speed up the tile's own production: building -> tile type -> resource -> new seconds per unit
+const BUILDING_MODIFIES = { Extractor: { Mountains: { Stone: 4 } } };
+function everyFor(i, o){
+  let e = o.every;
+  (buildings[i] || []).forEach(b => {
+    const m = BUILDING_MODIFIES[b.type]?.[board[i]]?.[o.res];
+    if(m !== undefined) e = Math.min(e, m);
+  });
+  return e;
+}
+const RECIPE_CATS = ["All","Buildings","Materials","Food & Drink","Clothing"];
+let recipeTab = "All";
+const RECIPES = [
+  // --- Buildings ---
+  {cat:"Buildings", out:"Bundle of Wheat",  amount:1, needs:{Wheat:10},                                  desc:"Place it in a Pen to feed the animals for 60 seconds."},
+  {cat:"Buildings", out:"Small Hut",        amount:1, needs:{Wood:20, Wheat:20},                         desc:"Housing for 2 people."},
+  {cat:"Buildings", out:"Straw Hut",        amount:1, needs:{Wheat:15},                                  desc:"Housing for 1 person."},
+  {cat:"Buildings", out:"Stone Grinder",    amount:1, needs:{Stone:8, Wood:2},                           desc:"While it stands you can grind Stone into Sand."},
+  {cat:"Buildings", out:"Extractor",        amount:1, needs:{Stone:10, Wood:35, Concrete:1},            desc:"Mountains and Rivers only. River: 1 Gold / 120s. Mountains: 1 Iron / 20s and 1 Coal / 15s."},
+  {cat:"Buildings", out:"Clothing Factory", amount:1, needs:{Wood:25, Wool:10, Stone:5, Leather:5},     desc:"While it stands you can make Robes."},
+  {cat:"Buildings", out:"Fishing Dock",     amount:1, needs:{Wood:20, Iron:2},                           desc:"Rivers only. The river stops giving Water, but you get 1 Fish every 14s."},
+  {cat:"Buildings", out:"Well",             amount:1, needs:{Stone:55, Wood:15, "Iron Ingot":3},        desc:"Gives 2 Water every second."},
+  {cat:"Buildings", out:"Cheese Maker",     amount:1, needs:{Wood:60, Stone:10, "Iron Ingot":8, Concrete:5}, desc:"Needs 1 Energy / s. While it has power you can make Cheese."},
+  {cat:"Buildings", out:"Smeltery",         amount:1, needs:{Stone:65, Wood:35, Concrete:25},           desc:"While it stands you can smelt Iron, Gold and Sand."},
+  {cat:"Buildings", out:"Coal Power Plant", amount:1, needs:{Concrete:270, Stone:150, "Iron Ingot":80, Wood:50, Glass:20, "Gold Ingot":5}, desc:"Plains and Concrete only. Place Compressed Coal on the same tile: 15 Energy / s."},
+  {cat:"Buildings", out:"House", amount:1, needs:{Stone:50, Wood:30, Concrete:10, Glass:8}, desc:"Housing for 5 people."},
+  {cat:"Buildings", out:"Water Wheel", amount:1, needs:{Wood:50, "Iron Ingot":1}, desc:"Rivers only. Produces 2 Energy / s."},
+  {cat:"Buildings", out:"Vending Stand", amount:1, needs:{Wood:15, Wool:2}, desc:"Unlocks the Shop (B): trade goods for Coins and Coins for goods."},
+  // --- Materials ---
+  {cat:"Materials", out:"Concrete",         amount:1, needs:{Sand:3, Water:1},                           desc:"Building material."},
+  {cat:"Materials", out:"Sand",             amount:2, needs:{Stone:1},               requires:"Stone Grinder", desc:"Grind 1 Stone into 2 Sand."},
+  {cat:"Materials", out:"Iron Ingot",       amount:1, needs:{Iron:2, Coal:2},        requires:"Smeltery",      desc:"Smelt iron ore with coal."},
+  {cat:"Materials", out:"Gold Ingot",       amount:1, needs:{Gold:3, Coal:3},        requires:"Smeltery",      desc:"Smelt gold with coal."},
+  {cat:"Materials", out:"Glass",            amount:1, needs:{Sand:2, Coal:1},        requires:"Smeltery",      desc:"Melt sand into glass. (Amounts are a placeholder: tell me the real ones!)"},
+  {cat:"Materials", out:"Compressed Coal", amount:1, needs:{Coal:20}, desc:"Fuel for a Coal Power Plant (on the same tile). Lasts 2 minutes."},
+  {cat:"Materials", out:"Coin", amount:20, needs:{"Gold Ingot":1}, desc:"Mint a Gold Ingot into 20 Coins. No Vending Stand needed."},
+  // --- Food & Drink ---
+  {cat:"Food & Drink", out:"Bread",         amount:1, needs:{Wheat:4},                                   desc:"Feeds your people: 4 Food."},
+  {cat:"Food & Drink", out:"Cheese",        amount:1, needs:{Milk:2},                requires:"Cheese Maker",  desc:"Feeds your people: 15 Food."},
+  {cat:"Food & Drink", out:"Water Barrel",  amount:1, needs:{Water:20},                                  desc:"Feeds your people: 10 Drinks."},
+  // --- Clothing ---
+  {cat:"Clothing",  out:"Clothing",         amount:5, needs:{Wool:1, Leather:1},                         desc:"Clothes your people: 1 Clothing each."},
+  {cat:"Clothing",  out:"Robe",             amount:1, needs:{Leather:3, Wool:1},     requires:"Clothing Factory", desc:"Clothes your people: 18 Clothing."}
+];
+
+// ---------- People ----------
+// What ONE person needs per minute (the group's demand = this x number of people).
+const NEEDS_PER_MIN = {Water:2, Food:1, Clothing:1};
+const STAT_LABEL = {Water:"Drinks", Food:"Food", Clothing:"Clothing"};
+const STAT_ITEM  = {Water:"Water", Food:"Bread", Clothing:"Clothing"};   // icon used for each stat
+// Items you can drag onto the people: item -> [stat it fills, amount per unit]
+const FEED = {Water:["Water",1], Milk:["Water",2], "Water Barrel":["Water",10], Bread:["Food",4], Clothing:["Clothing",1], Robe:["Clothing",18], Fish:["Food",8], Cheese:["Food",15]};
+const STARTER_MINUTES = 3;   // supplies the two people arrive with
+// People you must have to own the Nth tile (1-4 need none). Owning the 40th tile wins the game.
+const PEOPLE_REQ = {1:0,2:0,3:0,4:0,5:2,6:4,7:6,8:8,9:10,10:12,11:14,12:16,13:18,14:20,15:25,16:30,17:35,18:40,19:45,20:50,
+  21:60,22:70,23:80,24:90,25:100,26:125,27:150,28:175,29:200,30:250,31:300,32:350,33:400,34:450,35:500,
+  36:600,37:700,38:800,39:900,40:1000};
+const MAX_TILES = 40;
+const STARTER_PEOPLE = 2;   // the first villager arrives with supplies for this many people
+const ENERGY_ICON = "https://i.imgur.com/DlOyOc6.png";
+const ENERGY_MAX = 500;     // storage cap; nothing is added beyond it
+const WHEEL_RATE = 2;      // Energy per second from a Water Wheel
+const PLANT_RATE = 15;      // Energy per second from a Coal Power Plant that is burning fuel
+function peopleNeeded(n){ return PEOPLE_REQ[n] ?? 0; }
+// Rebuilding tiles. CONVERSIONS[from][to] = {permits, cost:{item:n}, gain:{item:n}}. Missing = impossible.
+// All building spots on the tile must be empty.
+const CONVERSIONS = {
+  Forest:   { Field:{permits:1, cost:{Wheat:10}, gain:{Wood:20}}, Pen:{permits:1, gain:{Wood:20}}, Plain:{permits:1, gain:{Wood:20}},
+              Concrete:{permits:1, cost:{Concrete:500}, gain:{Wood:20}} },
+  River:    { Plain:{permits:2, cost:{Iron:20}, gain:{Water:200}} },
+  Field:    { Forest:{permits:1, cost:{Wood:100}, gain:{Wheat:20}}, Plain:{permits:1, gain:{Wheat:20}},
+              Pen:{permits:1, cost:{Wood:5}, gain:{Wheat:20}}, Concrete:{permits:1, cost:{Concrete:500}, gain:{Wheat:20}} },
+  Plain:    { Field:{permits:1, cost:{Wheat:10}}, River:{permits:2, cost:{Water:200}}, Forest:{permits:1, cost:{Wood:100}},
+              Pen:{permits:1, cost:{Wood:5}},
+              Mountains:{permits:3, cost:{Stone:600, "Gold Ingot":4, "Iron Ingot":10, "Compressed Coal":10}},
+              Concrete:{permits:1, cost:{Concrete:500}}, Desert:{permits:1, cost:{Sand:1000}} },
+  Pen:      { Plain:{permits:1}, Field:{permits:1, cost:{Wheat:10}}, Forest:{permits:1, cost:{Wood:100}},
+              Concrete:{permits:1, cost:{Concrete:500}} },
+  Mountains:{ River:{permits:2, cost:{Water:200}, gain:{Stone:100}} },
+  Concrete: { Plain:{permits:2, gain:{Concrete:100}} },
+  Desert:   { Concrete:{permits:1, cost:{Concrete:500}, gain:{Sand:50}}, Pen:{permits:1, gain:{Sand:50}},
+              Field:{permits:1, cost:{Wheat:10}, gain:{Sand:50}}, Plain:{permits:1, gain:{Sand:50}} }
+};
+// ---------- Achievements (each gives ONE permit, once, and it is kept even if the condition is undone) ----------
+const RESOURCE_ITEMS = CATEGORIES[0].items;
+const ACHIEVEMENTS = [
+  {id:"life",  name:"Life",              icon:"🌱", desc:"Have at least 1 human in your world.",            prog:() => ({cur:Math.min(people.length, 1), max:1})},
+  {id:"dairy", name:"Dairy Master",      icon:"🧀", desc:"Make Cheese with the Cheese Maker.",              prog:() => ({cur:Math.min(stats.cheeseMade, 1), max:1})},
+  {id:"luz",   name:"Luz",               icon:"💡", desc:"Produce electricity.",                            prog:() => ({cur:stats.energyProduced > 0 ? 1 : 0, max:1})},
+  {id:"t15",   name:"Settling In",       icon:"⏳", desc:"Play for 15 minutes.",                            prog:() => ({cur:Math.min(playTime, 900), max:900, time:true})},
+  {id:"t60",   name:"Hour of Power",     icon:"⌛", desc:"Play for 1 hour.",                                prog:() => ({cur:Math.min(playTime, 3600), max:3600, time:true})},
+  {id:"t300",  name:"Marathon Monarch",  icon:"👑", desc:"Play for 5 hours.",                               prog:() => ({cur:Math.min(playTime, 18000), max:18000, time:true})},
+  {id:"types", name:"Patchwork Kingdom", icon:"🗺️", desc:"Own a tile of every variety, Concrete included.", prog:() => ({cur:new Set([...owned].map(i => board[i])).size, max:Object.keys(TYPES).length})},
+  {id:"hoard", name:"Dragon's Hoard",    icon:"🐉", desc:"Own 5000 of any one resource.",                   prog:() => ({cur:Math.min(5000, Math.max(...RESOURCE_ITEMS.map(n => inventory[n]))), max:5000})},
+  {id:"land",  name:"Land Baron",        icon:"🏰", desc:"Own 20 tiles.",                                   prog:() => ({cur:Math.min(owned.size, 20), max:20})},
+  {id:"plant", name:"Burning Ambition",  icon:"🔥", desc:"Own a Coal Power Plant.",                         prog:() => ({cur:buildingExists("Coal Power Plant") ? 1 : 0, max:1})}
+];
+
+// ---------- Shop (needs a Vending Stand) ----------
+// SELL: item -> [units you give, coins you get] per deal.   BUY: item -> [coins you pay, units you get] per deal.
+const SELL = {
+  Sand:[30,1], Water:[50,1], Wood:[40,1], Wheat:[40,1], Stone:[10,1], Iron:[2,1], Coal:[5,1], Gold:[1,2], Leather:[5,1],
+  Milk:[5,1], Wool:[5,1], Concrete:[10,1], Glass:[1,2], "Iron Ingot":[1,5], "Gold Ingot":[1,20], "Compressed Coal":[1,4],
+  Fish:[5,1], Cheese:[1,1], Bread:[10,1], "Water Barrel":[3,1], Clothing:[5,1], Robe:[1,1], "Bundle of Wheat":[2,1]
+};
+const BUY = {
+  Sand:[1,5], Water:[1,10], Wood:[1,6], Wheat:[1,6], Stone:[1,2], Iron:[2,1], Coal:[1,1], Gold:[5,1], Leather:[1,1],
+  Milk:[1,1], Wool:[1,1], Concrete:[1,2], Glass:[2,1], "Iron Ingot":[20,1], "Gold Ingot":[35,1], "Compressed Coal":[12,1],
+  Fish:[1,1], Cheese:[2,1], Bread:[1,2], "Water Barrel":[1,1], Clothing:[1,1], Robe:[2,1], "Bundle of Wheat":[2,1]
+};
+
+// ---------- Windows ----------
+const MODAL_IDS = ["recipeModal","invModal","achModal","shopModal","cheatModal"];
+const MODAL_OPEN = {
+  recipeModal: () => updateCraftState(), invModal: () => renderInvWindow(), achModal: () => renderAchievements(),
+  shopModal: () => renderShop(), cheatModal: () => renderCheat()
+};
+const CHEAT_CODES = ["güntseifweilmanuel", "guentseifweilmanuel", "guntseifweilmanuel"];
+
+const DEATH_MSG = {Water:"Your people died of thirst.", Food:"Your people starved.", Clothing:"Your people froze to death.", Housing:"Some of your people have no home left."};
+
+// ---------- Map generation ----------
+const PAIRS = {
+  "Desert-Concrete":0, "Desert-River":0, "Desert-Mountains":0, "Desert-Pen":40,
+  "Desert-Field":40, "Desert-Forest":0, "Desert-Plain":20,
+  "River-Mountains":50, "River-Pen":30, "River-Field":25, "River-Forest":50, "River-Plain":60,
+  "Mountains-Pen":10, "Mountains-Field":15, "Mountains-Forest":50, "Mountains-Plain":40,
+  "Pen-Field":60, "Pen-Forest":15, "Pen-Plain":30,
+  "Field-Forest":30, "Field-Plain":60,
+  "Forest-Plain":50
+};
+const SAME_WEIGHT = 40;
+function weight(a, b){
+  if(a === "Concrete" || b === "Concrete") return 0;
+  if(a === b) return SAME_WEIGHT;
+  return PAIRS[a+"-"+b] ?? PAIRS[b+"-"+a] ?? 0;
+}
+const GENERATED = Object.keys(TYPES).filter(t => t !== "Concrete");
+function generate(){
+  const cells = [];
+  for(let i = 0; i < W*H; i++){
+    const placed = [];
+    if(i % W > 0) placed.push(cells[i-1]);
+    if(i >= W) placed.push(cells[i-W]);
+    let scored = GENERATED.map(t => {
+      if(!placed.length) return [t, 1];
+      const ws = placed.map(p => weight(t, p));
+      return [t, ws.includes(0) ? 0 : ws.reduce((a,b)=>a+b,0)];
+    });
+    let total = scored.reduce((s,[,w]) => s+w, 0);
+    if(total === 0){ scored = GENERATED.map(t => [t,1]); total = GENERATED.length; }
+    let r = Math.random()*total, choice = scored[0][0];
+    for(const [t,w] of scored){ r -= w; if(r <= 0 && w > 0){ choice = t; break; } }
+    cells.push(choice);
+  }
+  return cells;
+}
+
+// ---------- State ----------
+const $ = id => document.getElementById(id);
+const grid = $("grid"), msg = $("msg");
+let board, owned, start, picks, inventory, pending, progress, buildings, placing, people, notice = "", care, careEls = null, gameOver = false, survived = 0, expanding = false, deleting = false, starterGiven = false, buildingId = 0, energy = 0, gridPowered = true, energyEls = null, prodRate = 0, useRate = 0, rebuilding = false, pendingDelete = null, achieved = {}, stats = {cheeseMade:0, energyProduced:0}, playTime = 0, achTimer = 0, keyBuf = "", shopTab = "sell", cheatAmount = 100, noticeTimer = null, tileEls, lastTime;
+
+function emptyStock(){ const o = {}; Object.keys(ITEMS).forEach(k => o[k] = 0); return o; }
+
+function itemIcon(name){
+  const def = ITEMS[name] || PEOPLE[name];
+  const s = document.createElement("span");
+  s.className = "ico"; s.textContent = def.icon;
+  if(def.url){
+    const img = new Image(); img.alt = name; img.title = name;
+    img.onload = () => { s.textContent = ""; s.appendChild(img); };
+    img.src = def.url;
+  }
+  return s;
+}
+
+function init(){
+  board = generate();
+  start = Math.floor(Math.random()*W*H);
+  owned = new Set([start]);
+  picks = 3;
+  people = [];
+  notice = "";
+  care = {Water:0, Food:0, Clothing:0}; careEls = null; gameOver = false; survived = 0;
+  $("over").hidden = true; $("recipeModal").hidden = true; $("invModal").hidden = true;
+  expanding = false; deleting = false; starterGiven = false; buildingId = 0; clearTimeout(noticeTimer);
+  rebuilding = false; pendingDelete = null; energy = 0; gridPowered = true; prodRate = 0; useRate = 0;
+  $("rebuildModal").hidden = true; $("confirmModal").hidden = true;
+  MODAL_IDS.forEach(id => $(id).hidden = true);
+  achieved = {}; stats = {cheeseMade:0, energyProduced:0}; playTime = 0; achTimer = 0; keyBuf = "";
+  $("overTitle").textContent = "Game over"; $("overTitle").style.color = "#ff8a80";
+  inventory = emptyStock();
+  pending = emptyStock();
+  progress = {};      // "tile:resource" -> seconds
+  buildings = {};     // tile -> array of placed buildings: {type, left?}  (bundles have `left` seconds)
+  placing = null;
+  lastTime = performance.now();
+  buildGrid();
+  refreshTiles();
+  renderInventory();
+  renderPending();
+  $("careBox").innerHTML = ""; $("careBox").appendChild(buildCareCard());
+  renderPeople();
+  buildEnergyBox();
+  renderAllRecipes();
+  const el = tileEls[start], wrap = $("mapwrap");
+  wrap.scrollTo({left: el.offsetLeft - wrap.clientWidth/2 + el.offsetWidth/2,
+                 top:  el.offsetTop  - wrap.clientHeight/2 + el.offsetHeight/2});
+}
+
+// ---------- Map ----------
+function buildGrid(){
+  grid.innerHTML = ""; tileEls = [];
+  board.forEach((name, i) => {
+    const t = TYPES[name];
+    const d = document.createElement("div");
+    d.className = "tile"; d.style.background = t.color;
+    const em = document.createElement("div"); em.className = "emoji"; em.textContent = t.icon; d.appendChild(em);
+    const img = new Image(); img.className = "bg"; img.alt = name;
+    img.onload = () => { em.remove(); d.prepend(img); };
+    img.src = t.url;
+    const label = document.createElement("div"); label.className = "label"; d.appendChild(label);
+    if(i === start){ const s = document.createElement("span"); s.className = "star"; s.textContent = "★"; d.appendChild(s); }
+    const sl = document.createElement("div"); sl.className = "slots"; d.appendChild(sl); d._slots = sl;
+    d.onclick = () => clickTile(i);
+    d._label = label; d._sig = "";
+    grid.appendChild(d); tileEls.push(d);
+  });
+}
+function neighbors(i){
+  const r = Math.floor(i/W), c = i % W, out = [];
+  if(r > 0) out.push(i-W);
+  if(r < H-1) out.push(i+W);
+  if(c > 0) out.push(i-1);
+  if(c < W-1) out.push(i+1);
+  return out;
+}
+function options(){
+  const s = new Set();
+  if(picks === 0 && !expanding) return s;
+  owned.forEach(i => neighbors(i).forEach(n => { if(!owned.has(n)) s.add(n); }));
+  return s;
+}
+function canPlace(i){
+  if(!placing || !owned.has(i)) return false;
+  const rule = BUILDINGS[placing];
+  if(rule.on && !rule.on.includes(board[i])) return false;
+  const arr = buildings[i] || [];
+  if(rule.onTileWith && !arr.some(x => x.type === rule.onTileWith)) return false;
+  if(rule.maxPerTile && arr.filter(x => x.type === placing).length >= rule.maxPerTile) return false;
+  return arr.length < slotCount(board[i]);
+}
+function fmtTime(s){ s = Math.ceil(s); return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0"); }
+
+function hayLeft(i){
+  return (buildings[i] || []).filter(x => x.type === "Bundle of Wheat").reduce((sum, x) => sum + x.left, 0);
+}
+function updateTile(i){
+  const d = tileEls[i], name = board[i], p = PRODUCERS[name];
+  if(!owned.has(i)){ d._label.textContent = name; return; }
+  const lines = [name];
+  if(p){
+    if(p.needsFeed){
+      const left = hayLeft(i);
+      lines.push(left > 0 ? `Fed · ${fmtTime(left)} left` : "Hungry · needs a Bundle of Wheat");
+    }
+    p.out.forEach(o => { if(!suppressedAt(i).has(o.res)) lines.push(`+1 ${o.res} / ${everyFor(i, o)}s`); });
+  }
+  const here = buildings[i] || [];
+  here.forEach(b => {
+    const outs = outputsOf(b, name);
+    if(outs) outs.forEach(o => lines.push(`${ITEMS[b.type].icon} +${o.amount || 1} ${o.res} / ${o.every}s`));
+    if(b.type === "Water Wheel") lines.push(`⚡ +${WHEEL_RATE} Energy / s`);
+    const e = BUILDINGS[b.type]?.energy;
+    if(e) lines.push(`⚡ uses ${e} Energy / s${gridPowered ? "" : " (NO POWER)"}`);
+    if(b.type === "Coal Power Plant"){
+      const fuel = here.filter(x => x.type === "Compressed Coal").reduce((sum, x) => sum + x.left, 0);
+      lines.push(fuel > 0 ? `⚡ +${PLANT_RATE} Energy / s · fuel ${fmtTime(fuel)}` : "⚡ No fuel: add Compressed Coal");
+    }
+  });
+  const text = lines.join("\n");
+  if(d._label.textContent !== text) d._label.textContent = text;
+  renderSlots(i);
+}
+function renderSlots(i){
+  const d = tileEls[i], b = buildings[i] || [], max = slotCount(board[i]);
+  const sig = max + ":" + b.map(x => x.type).join(",");
+  if(d._sig === sig) return;
+  d._sig = sig;
+  d._slots.innerHTML = "";
+  for(let k = 0; k < max; k++){
+    const s = document.createElement("div"); s.className = "slot";
+    if(k < b.length){ s.classList.add("full"); s.appendChild(itemIcon(b[k].type)); }
+    s.onclick = e => { if(deleting && k < (buildings[i] || []).length){ e.stopPropagation(); deleteBuilding(i, k); } };
+    d._slots.appendChild(s);
+  }
+}
+function refreshTiles(){
+  const opts = options();
+  tileEls.forEach((d, i) => {
+    d.className = "tile" + (owned.has(i) ? " owned" : opts.has(i) ? " option" : "") + (canPlace(i) ? " placeable" : "") + (deleting && buildings[i]?.length ? " deletable" : "") + (rebuilding && owned.has(i) ? " rebuildable" : "");
+    d._slots && (d._slots.style.display = owned.has(i) ? "flex" : "none");
+    updateTile(i);
+  });
+  const n = owned.size + 1;
+  if(notice) msg.textContent = notice;
+  else if(rebuilding) msg.textContent = "Rebuild mode: click one of your tiles to change its type (all building spots must be empty). Press S or Esc to stop.";
+  else if(deleting) msg.textContent = "Delete mode: click a building to remove it (click its slot if a tile has several). Nothing is refunded. Press D to stop.";
+  else if(placing) msg.textContent = `Placing “${placing}”: click a green-outlined tile with a free slot (Esc to stop).`;
+  else if(picks > 0) msg.textContent = `Choose ${picks} neighboring tile${picks>1?"s":""} (each must touch a tile you own). Production has already started!`;
+  else if(expanding) msg.textContent = `Expanding: click a highlighted tile next to your land. Tile ${n} needs ${peopleNeeded(n)} people (you have ${people.length}). Esc to cancel.`;
+  else if(owned.size >= MAX_TILES) msg.textContent = `You own all ${MAX_TILES} tiles!`;
+  else msg.textContent = `Territory: ${owned.size}/${MAX_TILES} tiles · tile ${n} needs ${peopleNeeded(n)} people (you have ${people.length}). Press E to expand, S to rebuild, C for recipes.`;
+  $("expandBtn").classList.toggle("active", expanding);
+  $("deleteBtn").classList.toggle("active", deleting);
+  $("rebuildBtn").classList.toggle("active", rebuilding);
+  const mode = deleting ? "deleting" : rebuilding ? "rebuilding" : placing ? "placing" : (expanding || picks > 0) ? "expanding" : "standard";
+  document.body.dataset.mode = mode;
+  $("modeBadge").textContent = mode.toUpperCase();
+  const hasShop = buildingExists("Vending Stand");
+  $("shopBtn").disabled = !hasShop;
+  $("shopBtn").title = hasShop ? "" : "Build a Vending Stand first";
+  if(!hasShop) $("shopModal").hidden = true;
+}
+function showNotice(text, ms = 6000){
+  notice = text; clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { notice = ""; refreshTiles(); }, ms);
+  refreshTiles();
+}
+function capacity(){      // total housing
+  return Object.values(buildings).reduce((sum, arr) => sum + arr.reduce((t, x) => t + (BUILDINGS[x.type]?.houses || 0), 0), 0);
+}
+function hutCount(){
+  return Object.values(buildings).reduce((sum, arr) => sum + arr.filter(x => BUILDINGS[x.type]?.houses).length, 0);
+}
+function buildingExists(type){
+  return Object.values(buildings).some(arr => arr.some(x => x.type === type));
+}
+function buildingActive(type){   // placed, and powered if it needs Energy
+  return buildingExists(type) && (!BUILDINGS[type].energy || gridPowered);
+}
+function toggleExpand(){
+  if(gameOver) return;
+  if(picks > 0){ showNotice("First choose your starting tiles."); return; }
+  if(expanding){ expanding = false; refreshTiles(); return; }
+  const n = owned.size + 1;
+  if(n > MAX_TILES){ showNotice(`You already own the maximum of ${MAX_TILES} tiles.`); return; }
+  const need = peopleNeeded(n);
+  if(people.length < need){ showNotice(`Tile ${n} needs ${need} people, but you only have ${people.length}. Build more Small Huts!`); return; }
+  placing = null; deleting = false; rebuilding = false; expanding = true;
+  renderInventory(); refreshTiles();
+}
+function toggleDelete(){
+  if(gameOver) return;
+  deleting = !deleting;
+  if(deleting){ placing = null; expanding = false; rebuilding = false; }
+  renderInventory(); refreshTiles();
+}
+function deleteBuilding(i, k){
+  const arr = buildings[i];
+  if(!arr || !arr[k]) return;
+  const b = arr[k];
+  const lost = BUILDINGS[b.type]?.houses || 0;
+  if(lost && people.length > capacity() - lost){         // would leave people homeless: ask twice
+    const now = performance.now();
+    if(!pendingDelete || pendingDelete.id !== b.id || now - pendingDelete.t > 8000){
+      pendingDelete = {id: b.id, t: now};
+      showNotice(`⚠ After removing this ${b.type} you would have ${people.length} people but only ${capacity() - lost} places to live: you would LOSE. Click it again within 8 seconds to confirm.`, 8000);
+      return;
+    }
+  }
+  pendingDelete = null;
+  arr.splice(k, 1);                                       // nothing is refunded
+  Object.keys(progress).forEach(key => { if(key.startsWith(i + ":b" + b.id + ":")) delete progress[key]; });
+  renderInventory(); renderPeople(); renderAllRecipes(); refreshTiles();
+  showNotice(`${b.type} removed.`);
+}
+
+// ---------- Rebuilding tiles ----------
+function toggleRebuild(){
+  if(gameOver) return;
+  rebuilding = !rebuilding;
+  if(rebuilding){ placing = null; expanding = false; deleting = false; }
+  renderInventory(); refreshTiles();
+}
+function tileThumb(t){
+  const d = document.createElement("div"); d.className = "thumb"; d.style.background = TYPES[t].color; d.textContent = TYPES[t].icon;
+  const img = new Image(); img.alt = t;
+  img.onload = () => { d.textContent = ""; d.appendChild(img); };
+  img.src = TYPES[t].url;
+  return d;
+}
+function chip(name, text, cls){
+  const c = document.createElement("span"); c.className = "cchip " + (cls || "");
+  c.appendChild(itemIcon(name)); c.appendChild(document.createTextNode(text));
+  return c;
+}
+function conversionCosts(c){ return Object.assign({Permit: c.permits}, c.cost || {}); }
+function openRebuild(i){
+  const from = board[i], body = $("rbBody"); body.innerHTML = "";
+  $("rbTitle").textContent = `Rebuild tile: ${from}`;
+  const note = text => { const d = document.createElement("p"); d.className = "sub"; d.style.fontSize = "14px"; d.textContent = text; body.appendChild(d); };
+  if((buildings[i] || []).length){
+    note("This tile still has buildings on it. Remove them all first (press D): every building spot must be empty to rebuild.");
+  } else {
+    const opts = CONVERSIONS[from] || {};
+    const keys = Object.keys(opts);
+    if(!keys.length) note(`A ${from} tile can't be converted into anything.`);
+    keys.forEach(to => {
+      const c = opts[to], costs = conversionCosts(c);
+      const row = document.createElement("div"); row.className = "crow";
+      row.appendChild(tileThumb(to));
+      const mid = document.createElement("div"); mid.className = "cmid";
+      const t = document.createElement("b"); t.textContent = `${from} → ${to}`; mid.appendChild(t);
+      const cost = document.createElement("div"); cost.className = "cchips";
+      cost.appendChild(document.createTextNode("Cost:"));
+      Object.entries(costs).forEach(([k, n]) => cost.appendChild(chip(k, `${inventory[k]} / ${n}`, inventory[k] < n ? "missing" : "")));
+      mid.appendChild(cost);
+      if(c.gain){
+        const gain = document.createElement("div"); gain.className = "cchips";
+        gain.appendChild(document.createTextNode("You receive:"));
+        Object.entries(c.gain).forEach(([k, n]) => gain.appendChild(chip(k, `+${n}`, "gain")));
+        mid.appendChild(gain);
+      }
+      row.appendChild(mid);
+      const btn = document.createElement("button"); btn.textContent = "Convert";
+      btn.disabled = !Object.entries(costs).every(([k, n]) => inventory[k] >= n);
+      btn.onclick = () => convertTile(i, to);
+      row.appendChild(btn);
+      body.appendChild(row);
+    });
+    const impossible = Object.keys(TYPES).filter(t => t !== from && !opts[t]);
+    if(impossible.length) note("Not possible from " + from + ": " + impossible.join(", ") + ".");
+  }
+  $("rebuildModal").hidden = false;
+}
+function convertTile(i, to){
+  const from = board[i], c = CONVERSIONS[from]?.[to];
+  if(!c || (buildings[i] || []).length) return;
+  const costs = conversionCosts(c);
+  if(!Object.entries(costs).every(([k, n]) => inventory[k] >= n)) return;
+  Object.entries(costs).forEach(([k, n]) => inventory[k] -= n);
+  Object.entries(c.gain || {}).forEach(([k, n]) => inventory[k] += n);
+  board[i] = to;
+  Object.keys(progress).forEach(key => { if(key.startsWith(i + ":")) delete progress[key]; });
+  rebuilding = false; $("rebuildModal").hidden = true;
+  buildGrid(); refreshTiles(); renderInventory();
+  showNotice(`Tile rebuilt: ${from} → ${to}.`);
+}
+
+// ---------- People ----------
+function addPerson(kind){
+  if(gameOver) return;
+  if(people.length >= capacity()){ showNotice("No free housing! Build a Small Hut (2 places) or a Straw Hut (1 place) first."); return; }
+  people.push(kind);
+  renderPeople(); refreshTiles();
+  if(!starterGiven){
+    starterGiven = true;
+    Object.keys(NEEDS_PER_MIN).forEach(k => care[k] = NEEDS_PER_MIN[k] * STARTER_PEOPLE * STARTER_MINUTES);
+    showNotice(`Your first villager has arrived with ${STARTER_MINUTES} minutes of supplies (enough for two people). Keep them alive!`);
+  }
+  if(!$("invModal").hidden) renderInvWindow();
+}
+
+// ---------- Placing / clicking ----------
+function clickTile(i){
+  if(gameOver) return;
+  if(deleting){                                          // clicking the tile removes its newest building
+    const arr = buildings[i];
+    if(arr && arr.length) deleteBuilding(i, arr.length - 1);
+    return;
+  }
+  if(rebuilding){ if(owned.has(i)) openRebuild(i); return; }
+  if(canPlace(i)){
+    inventory[placing]--;
+    const rule = BUILDINGS[placing], type = placing;
+    const b = {type, id: ++buildingId};
+    if(rule.lifetime) b.left = rule.lifetime;
+    (buildings[i] = buildings[i] || []).push(b);
+    if(inventory[placing] <= 0) placing = null;
+    renderInventory(); renderPeople(); renderAllRecipes(); refreshTiles();
+    if(rule.houses) showNotice(`${type} built: +${rule.houses} housing. Use the ＋ buttons at the top to add people.`);
+    return;
+  }
+  if(options().has(i)){
+    if(picks > 0){ owned.add(i); picks--; }
+    else {                                   // expanding
+      const n = owned.size + 1, need = peopleNeeded(n);
+      expanding = false;
+      if(people.length < need){ showNotice(`Tile ${n} needs ${need} people, but you only have ${people.length}.`); return; }
+      owned.add(i);
+    }
+    refreshTiles();
+    if(owned.size >= MAX_TILES) winGame();
+  }
+}
+
+// ---------- Production loop ----------
+function tick(now){
+  const dt = Math.min((now - lastTime)/1000, 1); lastTime = now;   // capped, so a hidden tab pauses the game
+  if(gameOver){ requestAnimationFrame(tick); return; }
+  let changed = false;
+  owned.forEach(i => {
+    const name = board[i], p = PRODUCERS[name];
+    if(!p) return;
+    let active = dt;
+    if(p.needsFeed){
+      const b = buildings[i] || [];
+      const hay = b.filter(x => x.type === "Bundle of Wheat");
+      active = 0;
+      let t = dt;
+      while(t > 0 && hay.length){          // bundles are eaten one after another
+        const use = Math.min(t, hay[0].left);
+        hay[0].left -= use; t -= use; active += use;
+        if(hay[0].left <= 1e-9){ b.splice(b.indexOf(hay[0]), 1); hay.shift(); refreshOnEmpty = true; }
+      }
+    }
+    if(active > 0){
+      const sup = suppressedAt(i);
+      p.out.forEach(o => {
+        if(sup.has(o.res)) return;
+        const key = i + ":" + o.res;
+        progress[key] = (progress[key] || 0) + active;
+        const ev = everyFor(i, o);
+        while(progress[key] >= ev){ progress[key] -= ev; pending[o.res] += (o.amount || 1); changed = true; }
+      });
+    }
+    if(p.needsFeed) updateTile(i);
+  });
+  owned.forEach(i => {                       // buildings that produce (Extractor)
+    (buildings[i] || []).forEach(b => {
+      const outs = outputsOf(b, board[i]);
+      if(!outs) return;
+      outs.forEach(o => {
+        const key = i + ":b" + b.id + ":" + o.res;
+        progress[key] = (progress[key] || 0) + dt;
+        while(progress[key] >= o.every){ progress[key] -= o.every; pending[o.res] += (o.amount || 1); changed = true; }
+      });
+    });
+  });
+  playTime += dt; achTimer += dt;
+  if(achTimer >= 0.5){ achTimer = 0; checkAchievements(); }
+  energyStep(dt);
+  consume(dt);
+  if(refreshOnEmpty){ refreshOnEmpty = false; refreshTiles(); }
+  if(changed) renderPending();
+  requestAnimationFrame(tick);
+}
+let refreshOnEmpty = false;
+
+// ---------- Energy ----------
+function buildEnergyBox(){
+  const box = $("energyBox"); box.innerHTML = "";
+  const ic = document.createElement("span"); ic.className = "ico"; ic.textContent = "⚡";
+  const img = new Image(); img.alt = "Energy"; img.onload = () => { ic.textContent = ""; ic.appendChild(img); }; img.src = ENERGY_ICON;
+  box.appendChild(ic);
+  const mid = document.createElement("div"); mid.className = "mid";
+  const main = document.createElement("div"); main.className = "eMain";
+  const sub = document.createElement("div"); sub.className = "sub";
+  const bar = document.createElement("div"); bar.className = "ebar";
+  const fill = document.createElement("div"); fill.className = "efill"; bar.appendChild(fill);
+  mid.append(main, sub, bar); box.appendChild(mid);
+  energyEls = {main, sub, fill};
+  updateEnergyUI();
+}
+function updateEnergyUI(){
+  if(!energyEls) return;
+  const m = `${Math.floor(energy)} / ${ENERGY_MAX}`;
+  const sub = `+${prodRate}/s · −${useRate}/s` + (useRate > 0 && !gridPowered ? " · NO POWER" : "");
+  if(energyEls.main.textContent !== m) energyEls.main.textContent = m;
+  if(energyEls.sub.textContent !== sub) energyEls.sub.textContent = sub;
+  energyEls.fill.style.width = (energy / ENERGY_MAX * 100) + "%";
+}
+function energyStep(dt){
+  let rate = 0;
+  owned.forEach(i => {                                   // Water Wheels: free, constant power
+    const wheels = (buildings[i] || []).filter(x => x.type === "Water Wheel").length;
+    if(!wheels) return;
+    const add = Math.max(0, Math.min(wheels * WHEEL_RATE * dt, ENERGY_MAX - energy));
+    energy += add; stats.energyProduced += add + 1e-6;
+    rate += wheels * WHEEL_RATE;
+  });
+  owned.forEach(i => {                                   // Coal Power Plants burn Compressed Coal on their own tile
+    const arr = buildings[i]; if(!arr) return;
+    if(!arr.some(x => x.type === "Coal Power Plant")) return;
+    const coal = arr.filter(x => x.type === "Compressed Coal");
+    let want = Math.min(dt, Math.max(0, ENERGY_MAX - energy) / PLANT_RATE);   // no fuel is burnt while storage is full
+    let burned = 0;
+    while(want > 1e-9 && coal.length){
+      const use = Math.min(want, coal[0].left);
+      coal[0].left -= use; want -= use; burned += use;
+      if(coal[0].left <= 1e-9){ arr.splice(arr.indexOf(coal[0]), 1); coal.shift(); refreshOnEmpty = true; }
+    }
+    const gain = burned * PLANT_RATE;
+    energy = Math.min(ENERGY_MAX, energy + gain); stats.energyProduced += gain;
+    if(coal.length) rate += PLANT_RATE;
+    updateTile(i);
+  });
+  let use = 0;                                           // buildings that need Energy
+  owned.forEach(i => (buildings[i] || []).forEach(b => { use += BUILDINGS[b.type]?.energy || 0; }));
+  const need = use * dt, was = gridPowered;
+  if(energy >= need){ energy -= need; gridPowered = true; }
+  else { energy = 0; gridPowered = false; }
+  prodRate = rate; useRate = use;
+  if(was !== gridPowered){ renderAllRecipes(); refreshOnEmpty = true; }
+  updateEnergyUI();
+}
+
+// ---------- UI panels ----------
+function row(name, extra){
+  const r = document.createElement("div"); r.className = "row";
+  if(FEED[name]){
+    r.draggable = true; r.classList.add("drag"); r.title = "Drag onto your people (Shift = whole stack)";
+    r.addEventListener("dragstart", e => { e.dataTransfer.setData("text/plain", name); e.dataTransfer.effectAllowed = "move"; });
+  }
+  r.appendChild(itemIcon(name));
+  const n = document.createElement("span"); n.className = "name"; n.textContent = name; r.appendChild(n);
+  if(extra) r.appendChild(extra);
+  const c = document.createElement("span"); c.className = "count"; c.textContent = inventory[name]; r.appendChild(c);
+  return r;
+}
+function placeButton(n){
+  const btn = document.createElement("button");
+  btn.textContent = placing === n ? "Cancel" : "Place";
+  btn.className = placing === n ? "active" : "";
+  btn.onclick = () => { placing = placing === n ? null : n; expanding = false; deleting = false; rebuilding = false; renderInventory(); refreshTiles(); };
+  return btn;
+}
+function renderInventory(){
+  const box = $("invlist"); box.innerHTML = "";
+  CATEGORIES.forEach(cat => {
+    const items = cat.items.filter(n => cat.always || inventory[n] > 0 || placing === n);
+    if(!items.length) return;
+    const h = document.createElement("div"); h.className = "sep"; h.textContent = cat.name; box.appendChild(h);
+    items.forEach(n => box.appendChild(row(n, ITEMS[n].building ? placeButton(n) : null)));
+  });
+  updateCraftState();
+  updateCare();
+  if(!$("invModal").hidden) renderInvWindow();
+  if(!$("shopModal").hidden) renderShop();
+}
+function renderInvWindow(){
+  const box = $("invBig"); box.innerHTML = "";
+  $("invSummary").textContent = `Tiles ${owned.size}/${MAX_TILES}  ·  People ${people.length} / ${capacity()} housing  ·  Huts ${hutCount()}`;
+  const heading = t => { const h = document.createElement("h3"); h.className = "ihead"; h.textContent = t; box.appendChild(h); };
+  CATEGORIES.forEach(cat => {
+    heading(cat.name);
+    const g = document.createElement("div"); g.className = "igrid";
+    cat.items.forEach(n => {
+      const c = document.createElement("div"); c.className = "icard" + (inventory[n] > 0 ? "" : " zero");
+      c.appendChild(itemIcon(n));
+      const nm = document.createElement("div"); nm.textContent = n; c.appendChild(nm);
+      const ct = document.createElement("div"); ct.className = "cnt"; ct.textContent = inventory[n]; c.appendChild(ct);
+      if(inventory[n] > 0 && ITEMS[n].building){
+        const b = document.createElement("button"); b.textContent = "Place";
+        b.onclick = () => { placing = n; expanding = false; deleting = false; rebuilding = false; toggleInventory(false); renderInventory(); refreshTiles(); };
+        c.appendChild(b);
+      } else if(inventory[n] > 0 && FEED[n] && people.length){
+        const b = document.createElement("button"); b.textContent = "Feed 1";
+        b.onclick = () => giveToPeople(n, false);
+        c.appendChild(b);
+      }
+      g.appendChild(c);
+    });
+    box.appendChild(g);
+  });
+  heading("Placed buildings");
+  const counts = {};
+  Object.values(buildings).forEach(arr => arr.forEach(b => counts[b.type] = (counts[b.type] || 0) + 1));
+  const g = document.createElement("div"); g.className = "igrid";
+  Object.entries(counts).forEach(([t, n]) => {
+    const c = document.createElement("div"); c.className = "icard";
+    c.appendChild(itemIcon(t));
+    const nm = document.createElement("div"); nm.textContent = t; c.appendChild(nm);
+    const ct = document.createElement("div"); ct.className = "cnt"; ct.textContent = "× " + n; c.appendChild(ct);
+    g.appendChild(c);
+  });
+  if(!Object.keys(counts).length){ const m = document.createElement("span"); m.className = "muted"; m.textContent = "Nothing built yet."; box.appendChild(m); }
+  else box.appendChild(g);
+}
+function toggleModal(id, force){
+  const m = $(id), show = force === undefined ? m.hidden : force;
+  MODAL_IDS.forEach(x => { if(x !== id) $(x).hidden = true; });
+  m.hidden = !show;
+  if(show) MODAL_OPEN[id]();
+}
+function toggleInventory(force){ toggleModal("invModal", force); }
+function toggleShop(force){
+  if(!buildingExists("Vending Stand")){ showNotice("Build a Vending Stand to open the shop."); return; }
+  toggleModal("shopModal", force);
+}
+function renderPending(){
+  const box = $("pending"); box.innerHTML = "";
+  let any = false;
+  Object.keys(pending).forEach(name => {
+    if(!pending[name]) return;
+    any = true;
+    const c = document.createElement("div"); c.className = "chip";
+    c.appendChild(itemIcon(name));
+    c.appendChild(document.createTextNode("× " + pending[name]));
+    box.appendChild(c);
+  });
+  if(!any){ const m = document.createElement("span"); m.className = "muted"; m.textContent = "Nothing to collect yet…"; box.appendChild(m); }
+  $("collect").disabled = !any;
+}
+function renderRecipes(box, big){
+  box.innerHTML = "";
+  RECIPES.forEach((rc, idx) => {
+    const card = document.createElement("div"); card.className = "recipe" + (big ? " big" : "") + (isUnlocked(rc) ? "" : " locked");
+    const title = document.createElement("div"); title.className = "line";
+    title.appendChild(itemIcon(rc.out));
+    const b = document.createElement("b"); b.textContent = rc.out + (rc.amount > 1 ? " × " + rc.amount : ""); title.appendChild(b);
+    card.appendChild(title);
+    if(!isUnlocked(rc)){ const lk = document.createElement("div"); lk.className = "lock"; lk.textContent = lockText(rc); card.appendChild(lk); }
+    if(big && rc.desc){ const d = document.createElement("div"); d.className = "sub"; d.textContent = rc.desc; card.appendChild(d); }
+    const needs = document.createElement("div"); needs.className = "line";
+    Object.entries(rc.needs).forEach(([name, n], k) => {
+      if(k > 0) needs.appendChild(document.createTextNode("+"));
+      const s = document.createElement("span"); s.className = "need"; s.dataset.res = name; s.dataset.idx = idx;
+      s.style.cssText = "display:inline-flex;align-items:center";
+      s.appendChild(itemIcon(name));
+      s.appendChild(document.createTextNode("× " + n));
+      if(big){ const h = document.createElement("span"); h.className = "have"; s.appendChild(h); }
+      needs.appendChild(s);
+    });
+    card.appendChild(needs);
+    const btn = document.createElement("button"); btn.textContent = "Craft"; btn.dataset.idx = idx;
+    btn.onclick = () => craft(idx);
+    card.appendChild(btn);
+    box.appendChild(card);
+  });
+  updateCraftState();
+}
+function isUnlocked(rc){ return !rc.requires || buildingActive(rc.requires); }
+function lockText(rc){
+  return buildingExists(rc.requires) ? "⚡ Your " + rc.requires + " has no energy" : "🔒 Build a " + rc.requires + " to unlock";
+}
+function canCraft(rc){ return isUnlocked(rc) && Object.entries(rc.needs).every(([r, n]) => inventory[r] >= n); }
+function renderAllRecipes(){ renderRecipes($("recipes"), false); renderRecipeWindow(); }
+function recipeCard(rc, idx){
+  const card = document.createElement("div"); card.className = "rcard" + (isUnlocked(rc) ? "" : " locked");
+  const head = document.createElement("div"); head.className = "rhead";
+  head.appendChild(itemIcon(rc.out));
+  const t = document.createElement("div"); t.className = "rtitle";
+  const b = document.createElement("b"); b.textContent = rc.out + (rc.amount > 1 ? " × " + rc.amount : ""); t.appendChild(b);
+  const sub = document.createElement("span"); sub.className = "sub"; sub.textContent = rc.cat; t.appendChild(sub);
+  head.appendChild(t); card.appendChild(head);
+  if(rc.desc){ const d = document.createElement("div"); d.className = "sub"; d.style.fontSize = "13px"; d.textContent = rc.desc; card.appendChild(d); }
+  if(!isUnlocked(rc)){ const lk = document.createElement("div"); lk.className = "lock"; lk.textContent = lockText(rc); card.appendChild(lk); }
+  const ing = document.createElement("div"); ing.className = "ring";
+  Object.keys(rc.needs).forEach(name => {
+    const n = document.createElement("div"); n.className = "need"; n.dataset.res = name; n.dataset.idx = idx;
+    n.appendChild(itemIcon(name));
+    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = name; n.appendChild(nm);
+    const h = document.createElement("span"); h.className = "have"; n.appendChild(h);
+    ing.appendChild(n);
+  });
+  card.appendChild(ing);
+  const btn = document.createElement("button"); btn.textContent = "Craft"; btn.dataset.idx = idx;
+  btn.onclick = () => craft(idx);
+  card.appendChild(btn);
+  return card;
+}
+function renderRecipeWindow(){
+  const tabs = $("recipeTabs"); tabs.innerHTML = "";
+  RECIPE_CATS.forEach(c => {
+    const b = document.createElement("button");
+    b.className = "tab" + (c === recipeTab ? " active" : "");
+    b.textContent = `${c} (${c === "All" ? RECIPES.length : RECIPES.filter(r => r.cat === c).length})`;
+    b.onclick = () => { recipeTab = c; renderRecipeWindow(); };
+    tabs.appendChild(b);
+  });
+  const box = $("recipesBig"); box.innerHTML = "";
+  RECIPES.forEach((rc, idx) => { if(recipeTab === "All" || rc.cat === recipeTab) box.appendChild(recipeCard(rc, idx)); });
+  updateCraftState();
+}
+function updateCraftState(){
+  document.querySelectorAll(".rlist button").forEach(b => {
+    const ok = canCraft(RECIPES[b.dataset.idx]);
+    b.disabled = !ok;
+    const card = b.closest(".rcard"); if(card) card.classList.toggle("ready", ok);
+  });
+  document.querySelectorAll(".rlist .need").forEach(s => {
+    const need = RECIPES[s.dataset.idx].needs[s.dataset.res];
+    s.classList.toggle("missing", inventory[s.dataset.res] < need);
+    const h = s.querySelector(".have"); if(h) h.textContent = `${inventory[s.dataset.res]} / ${need}`;
+  });
+}
+function craft(idx){
+  const rc = RECIPES[idx];
+  if(!canCraft(rc)) return;
+  Object.entries(rc.needs).forEach(([r, n]) => inventory[r] -= n);
+  inventory[rc.out] += rc.amount;
+  if(rc.out === "Cheese") stats.cheeseMade += rc.amount;
+  renderInventory();
+}
+
+// ---------- People: needs, supplies, game over ----------
+function consume(dt){
+  if(people.length > capacity()){ endGame("Housing"); return; }   // someone has nowhere to live
+  if(!people.length) return;
+  survived += dt;
+  for(const stat of Object.keys(NEEDS_PER_MIN)){
+    care[stat] -= NEEDS_PER_MIN[stat] * people.length * dt / 60;
+    if(care[stat] <= 0){ care[stat] = 0; updateCare(); endGame(stat); return; }
+  }
+  updateCare();
+}
+function endGame(stat){
+  gameOver = true; placing = null;
+  $("overTitle").textContent = "Game over"; $("overTitle").style.color = "#ff8a80";
+  $("overMsg").textContent = `${DEATH_MSG[stat]} They survived ${fmtTime(survived)} after moving in.`;
+  $("over").hidden = false;
+}
+function winGame(){
+  gameOver = true; placing = null;
+  $("overTitle").textContent = "🏆 You win!"; $("overTitle").style.color = "#7cfc00";
+  $("overMsg").textContent = `You own ${MAX_TILES} tiles and your village thrives with ${people.length} people. Time played: ${fmtLong(playTime)}.`;
+  $("over").hidden = false;
+}
+function fmtLong(sec){
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = Math.floor(sec % 60);
+  return (h > 0 ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s).padStart(2, "0");
+}
+function buildCareCard(){
+  const card = document.createElement("div"); card.className = "care idle";
+  const stats = document.createElement("div"); stats.className = "stats"; card.appendChild(stats);
+  careEls = {card};
+  Object.keys(NEEDS_PER_MIN).forEach(stat => {
+    const r = document.createElement("div"); r.className = "stat";
+    r.appendChild(itemIcon(STAT_ITEM[stat]));
+    const mid = document.createElement("div"); mid.className = "mid";
+    const l1 = document.createElement("div");
+    const amt = document.createElement("span"); amt.className = "count"; l1.appendChild(amt);
+    l1.appendChild(document.createTextNode(STAT_LABEL[stat]));
+    const sub = document.createElement("div"); sub.className = "sub";
+    mid.append(l1, sub); r.appendChild(mid);
+    stats.appendChild(r);
+    careEls[stat] = {row:r, sub, amt};
+  });
+  const tip = document.createElement("div"); tip.className = "sub tip";
+  tip.textContent = "Drag drinks (Water, Milk = 2, Barrel = 10), food (Bread = 4, Fish = 8, Cheese = 15) or clothing (Clothing, Robe = 18) here. Shift-drag = whole stack.";
+  card.appendChild(tip);
+  card.addEventListener("dragover", e => { e.preventDefault(); card.classList.add("over"); });
+  card.addEventListener("dragleave", e => { if(!card.contains(e.relatedTarget)) card.classList.remove("over"); });
+  card.addEventListener("drop", e => {
+    e.preventDefault(); card.classList.remove("over");
+    giveToPeople(e.dataTransfer.getData("text/plain"), e.shiftKey);
+  });
+  return card;
+}
+function renderPeople(){
+  const box = $("people"); box.innerHTML = "";
+  const cap = capacity();
+  if(!people.length){
+    const m = document.createElement("span"); m.className = "muted";
+    m.textContent = cap > 0 ? "No people yet. Add some with ＋" : "No people yet. Build a hut first!";
+    box.appendChild(m);
+  } else {
+    const counts = {}; people.forEach(p => counts[p] = (counts[p] || 0) + 1);
+    Object.entries(counts).forEach(([name, n]) => {
+      const c = document.createElement("div"); c.className = "pchip";
+      const ic = itemIcon(name); ic.classList.add("big"); c.appendChild(ic);
+      c.appendChild(document.createTextNode("× " + n));
+      box.appendChild(c);
+    });
+  }
+  const col = document.createElement("div"); col.className = "pcol";
+  const sh = document.createElement("div"); sh.id = "shelter";
+  sh.textContent = `🛖 Housing: ${people.length} / ${cap}`;
+  col.appendChild(sh);
+  const btns = document.createElement("div"); btns.className = "pbtns";
+  ["Man", "Woman"].forEach(kind => {
+    const b = document.createElement("button"); b.textContent = "＋ " + kind;
+    b.disabled = people.length >= cap;
+    b.title = people.length >= cap ? "No free housing: build a hut" : "Add a " + kind.toLowerCase();
+    b.onclick = () => addPerson(kind);
+    btns.appendChild(b);
+  });
+  col.appendChild(btns);
+  box.appendChild(col);
+  updateCare();
+}
+function giveToPeople(name, all){
+  const f = FEED[name];
+  if(!f || !people.length || gameOver) return;
+  const n = all ? inventory[name] : Math.min(1, inventory[name]);
+  if(n <= 0) return;
+  inventory[name] -= n;
+  care[f[0]] += f[1] * n;
+  renderInventory();
+}
+function updateCare(){
+  if(!careEls) return;
+  const n = people.length;
+  careEls.card.classList.toggle("idle", n === 0);
+  Object.keys(NEEDS_PER_MIN).forEach(stat => {
+    const el = careEls[stat]; if(!el) return;
+    const rate = NEEDS_PER_MIN[stat] * n;                    // group demand per minute
+    let sub = "nobody to supply yet", low = false;
+    if(rate > 0){
+      const left = care[stat] / rate * 60;                   // seconds until empty
+      sub = `needs ${rate}/min · lasts ${fmtTime(left)}`; low = left < 30;
+    }
+    const a = care[stat].toFixed(1);
+    if(el.amt.textContent !== a) el.amt.textContent = a;
+    if(el.sub.textContent !== sub) el.sub.textContent = sub;
+    el.row.classList.toggle("low", low);
+  });
+}
+
+// ---------- Achievements ----------
+function checkAchievements(){
+  const won = [];
+  ACHIEVEMENTS.forEach(a => {
+    if(achieved[a.id]) return;
+    const p = a.prog();
+    if(p.cur >= p.max){ achieved[a.id] = true; inventory.Permit++; won.push(a.name); }
+  });
+  if(won.length){
+    renderInventory();
+    showNotice(`🏆 Achievement${won.length > 1 ? "s" : ""} unlocked: ${won.join(", ")}! +${won.length} Permit${won.length > 1 ? "s" : ""}`, 8000);
+  }
+  if(!$("achModal").hidden) renderAchievements();
+}
+function renderAchievements(){
+  const done = ACHIEVEMENTS.filter(a => achieved[a.id]).length;
+  $("achSummary").textContent = `${done} / ${ACHIEVEMENTS.length} completed · each achievement gives one Permit, once.`;
+  const box = $("achBody"); box.innerHTML = "";
+  ACHIEVEMENTS.forEach(a => {
+    const p = a.prog(), ok = !!achieved[a.id];
+    const card = document.createElement("div"); card.className = "rcard acard" + (ok ? " done" : "");
+    const head = document.createElement("div"); head.className = "rhead";
+    const ic = document.createElement("span"); ic.className = "ico"; ic.textContent = a.icon; head.appendChild(ic);
+    const t = document.createElement("div"); t.className = "rtitle";
+    const b = document.createElement("b"); b.textContent = a.name; t.appendChild(b);
+    const sub = document.createElement("span"); sub.className = "sub"; sub.textContent = ok ? "✔ Completed · Permit received" : "Reward: 1 Permit"; t.appendChild(sub);
+    head.appendChild(t); card.appendChild(head);
+    const d = document.createElement("div"); d.className = "sub"; d.style.fontSize = "13px"; d.textContent = a.desc; card.appendChild(d);
+    const bar = document.createElement("div"); bar.className = "abar";
+    const fill = document.createElement("div"); fill.className = "afill"; fill.style.width = (ok ? 100 : p.cur / p.max * 100) + "%"; bar.appendChild(fill);
+    card.appendChild(bar);
+    const txt = document.createElement("div"); txt.className = "sub";
+    txt.textContent = ok ? "Done!" : (p.time ? `${fmtLong(p.cur)} / ${fmtLong(p.max)}` : `${Math.floor(p.cur)} / ${p.max}`);
+    card.appendChild(txt);
+    box.appendChild(card);
+  });
+}
+
+// ---------- Shop ----------
+function renderShop(){
+  $("shopCoins").textContent = inventory.Coin;
+  const tabs = $("shopTabs"); tabs.innerHTML = "";
+  [["sell", "Sell goods → Coins"], ["buy", "Buy goods ← Coins"]].forEach(([id, label]) => {
+    const tb = document.createElement("button"); tb.className = "tab" + (id === shopTab ? " active" : ""); tb.textContent = label;
+    tb.onclick = () => { shopTab = id; renderShop(); };
+    tabs.appendChild(tb);
+  });
+  const box = $("shopBody"); box.innerHTML = "";
+  const table = shopTab === "sell" ? SELL : BUY;
+  Object.entries(table).forEach(([name, [x, y]]) => {
+    const row = document.createElement("div"); row.className = "srow";
+    row.appendChild(itemIcon(name));
+    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = name; row.appendChild(nm);
+    const rate = document.createElement("span"); rate.className = "rate";
+    rate.textContent = shopTab === "sell" ? `${x} → ${y} Coin${y > 1 ? "s" : ""}` : `${x} Coin${x > 1 ? "s" : ""} → ${y}`;
+    row.appendChild(rate);
+    const max = shopTab === "sell" ? Math.floor(inventory[name] / x) : Math.floor(inventory.Coin / x);
+    [1, 10, "max"].forEach(d => {
+      const n = d === "max" ? max : d;
+      const bt = document.createElement("button"); bt.textContent = d === "max" ? `Max (${max})` : "×" + d;
+      bt.disabled = n < 1 || n > max;
+      bt.onclick = () => shopTrade(name, n);
+      row.appendChild(bt);
+    });
+    box.appendChild(row);
+  });
+}
+function shopTrade(name, deals){
+  if(!buildingExists("Vending Stand") || deals < 1) return;
+  if(shopTab === "sell"){
+    const [units, coins] = SELL[name];
+    if(inventory[name] < units * deals) return;
+    inventory[name] -= units * deals; inventory.Coin += coins * deals;
+  } else {
+    const [coins, units] = BUY[name];
+    if(inventory.Coin < coins * deals) return;
+    inventory.Coin -= coins * deals; inventory[name] += units * deals;
+  }
+  renderInventory();
+}
+
+// ---------- Cheat menu ----------
+function openCheat(){
+  placing = null; expanding = false; deleting = false; rebuilding = false;   // undo any hotkeys hit while typing the code
+  clearTimeout(noticeTimer); notice = "";
+  $("rebuildModal").hidden = true;
+  renderInventory(); refreshTiles();
+  toggleModal("cheatModal", true);
+}
+function cheatClaim(n){
+  for(let k = 0; k < n && owned.size < MAX_TILES; k++){
+    const cand = [];
+    owned.forEach(i => neighbors(i).forEach(t => { if(!owned.has(t)) cand.push(t); }));
+    if(!cand.length) break;
+    owned.add(cand[Math.floor(Math.random() * cand.length)]);
+  }
+  refreshTiles();
+  if(owned.size >= MAX_TILES){ toggleModal("cheatModal", false); winGame(); }
+  else renderCheat();
+}
+function renderCheat(){
+  const box = $("cheatBody"); box.innerHTML = "";
+  const hint = document.createElement("div"); hint.className = "sub"; hint.textContent = "Pick an amount, then click any item to add that many to your inventory."; box.appendChild(hint);
+  const amts = document.createElement("div"); amts.className = "tabs"; amts.style.marginTop = "10px";
+  [1, 10, 100, 1000, 10000].forEach(a => {
+    const bt = document.createElement("button"); bt.className = "tab" + (a === cheatAmount ? " active" : ""); bt.textContent = "+" + a;
+    bt.onclick = () => { cheatAmount = a; renderCheat(); };
+    amts.appendChild(bt);
+  });
+  box.appendChild(amts);
+  const extras = document.createElement("div"); extras.className = "tabs";
+  [["⚡ Fill energy", () => { energy = ENERGY_MAX; updateEnergyUI(); }],
+   ["⏱ +15 min play time", () => { playTime += 900; }],
+   ["⏱ +1 hour play time", () => { playTime += 3600; }],
+   ["🗺 Claim 1 tile", () => cheatClaim(1)],
+   ["🗺 Claim 5 tiles", () => cheatClaim(5)],
+   ["🗺 Claim 10 tiles", () => cheatClaim(10)]
+  ].forEach(([label, fn]) => {
+    const bt = document.createElement("button"); bt.className = "sec"; bt.textContent = label;
+    bt.onclick = () => { fn(); renderCheat(); };
+    extras.appendChild(bt);
+  });
+  box.appendChild(extras);
+  CATEGORIES.forEach(cat => {
+    const h = document.createElement("h3"); h.className = "ihead"; h.textContent = cat.name; box.appendChild(h);
+    const g = document.createElement("div"); g.className = "igrid";
+    cat.items.forEach(n => {
+      const c = document.createElement("div"); c.className = "icard click";
+      c.appendChild(itemIcon(n));
+      const nm = document.createElement("div"); nm.textContent = n; c.appendChild(nm);
+      const ct = document.createElement("div"); ct.className = "cnt"; ct.textContent = inventory[n]; c.appendChild(ct);
+      c.onclick = () => { inventory[n] += cheatAmount; renderInventory(); renderCheat(); };
+      g.appendChild(c);
+    });
+    box.appendChild(g);
+  });
+}
+
+// ---------- Recipe window ----------
+function toggleRecipes(force){ toggleModal("recipeModal", force); }
+
+$("collect").onclick = () => {
+  Object.keys(pending).forEach(k => { inventory[k] += pending[k]; pending[k] = 0; });
+  renderPending(); renderInventory();
+};
+$("newgame").onclick = () => {
+  if(!gameOver && playTime > 120) $("confirmModal").hidden = false;   // a world older than 2 minutes: ask first
+  else init();
+};
+$("confirmOk").onclick = () => { $("confirmModal").hidden = true; init(); };
+$("confirmCancel").onclick = () => { $("confirmModal").hidden = true; };
+$("achBtn").onclick = () => toggleModal("achModal");
+$("shopBtn").onclick = () => toggleShop();
+$("closeAch").onclick = () => toggleModal("achModal", false);
+$("closeShop").onclick = () => toggleModal("shopModal", false);
+$("closeCheat").onclick = () => toggleModal("cheatModal", false);
+MODAL_IDS.forEach(id => $(id).addEventListener("click", e => { if(e.target.id === id) toggleModal(id, false); }));
+$("again").onclick = init;
+$("expandBtn").onclick = toggleExpand;
+$("deleteBtn").onclick = toggleDelete;
+$("rebuildBtn").onclick = toggleRebuild;
+$("closeRb").onclick = () => { $("rebuildModal").hidden = true; };
+$("rebuildModal").addEventListener("click", e => { if(e.target.id === "rebuildModal") $("rebuildModal").hidden = true; });
+$("invBtn").onclick = () => toggleInventory();
+$("closeInv").onclick = () => toggleInventory(false);
+$("invModal").addEventListener("click", e => { if(e.target.id === "invModal") toggleInventory(false); });
+$("recipesBtn").onclick = () => toggleRecipes();
+$("closeRecipes").onclick = () => toggleRecipes(false);
+$("recipeModal").addEventListener("click", e => { if(e.target.id === "recipeModal") toggleRecipes(false); });
+document.addEventListener("keydown", e => {
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  if(e.key.length === 1){                                   // secret code, typed anywhere
+    keyBuf = (keyBuf + e.key.toLowerCase()).slice(-30);
+    if(CHEAT_CODES.some(c => keyBuf.endsWith(c))){ keyBuf = ""; openCheat(); return; }
+  }
+  const k = e.key.toLowerCase();
+  if(k === "escape"){
+    if(!$("confirmModal").hidden){ $("confirmModal").hidden = true; return; }
+    const open = MODAL_IDS.find(id => !$(id).hidden);
+    if(open){ $(open).hidden = true; return; }
+    if(!$("rebuildModal").hidden){ $("rebuildModal").hidden = true; return; }
+    if(placing){ placing = null; renderInventory(); refreshTiles(); }
+    else if(expanding){ expanding = false; refreshTiles(); }
+    else if(deleting){ deleting = false; renderInventory(); refreshTiles(); }
+    else if(rebuilding){ rebuilding = false; renderInventory(); refreshTiles(); }
+  }
+  else if(k === "c") toggleRecipes();
+  else if(k === "i") toggleInventory();
+  else if(k === "a") toggleModal("achModal");
+  else if(k === "b") toggleShop();
+  else if(k === "e") toggleExpand();
+  else if(k === "d") toggleDelete();
+  else if(k === "s") toggleRebuild();
+});
+
+init();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
